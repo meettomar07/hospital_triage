@@ -99,6 +99,19 @@ class HospitalApiTests(unittest.TestCase):
         payload = response.json()
         self.assertIn("available_tasks", payload["detail"])
 
+    def test_root_and_system_insights_expose_dashboard_metadata(self) -> None:
+        root_response = self.client.get("/")
+        self.assertEqual(root_response.status_code, 200)
+        root_payload = root_response.json()
+        self.assertIn("system_insights", root_payload["methods"])
+        self.assertIn("demo_seed", root_payload["methods"])
+
+        insights_response = self.client.get("/system-insights")
+        self.assertEqual(insights_response.status_code, 200)
+        insights_payload = insights_response.json()
+        self.assertIn("total_doctors", insights_payload)
+        self.assertIn("doctors_available", insights_payload)
+
     def test_state_includes_seed_and_event_log(self) -> None:
         self.client.post("/reset", json={"task_id": "task_1_basic_triage", "seed": 11})
         response = self.client.get("/state")
