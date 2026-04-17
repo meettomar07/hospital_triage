@@ -8,18 +8,73 @@ pinned: false
 
 # Hospital Triage System
 
+A hospital triage dashboard and simulation backend built with FastAPI and Streamlit, with an OpenEnv-compatible reinforcement learning environment for benchmarking agent behavior.
+
+## Quick Demo
+
+1. Start the backend:
+
+```bash
+pip install -e .
+uvicorn backend.server.app:app --host 127.0.0.1 --port 8000
+```
+
+2. Start the frontend in another terminal:
+
+```bash
+pip install -r frontend/requirements.txt
+streamlit run frontend/app.py --server.port 8501 --server.address 127.0.0.1
+```
+
+3. Open the dashboard:
+
+```text
+http://127.0.0.1:8501
+```
+
+4. Click `Load Demo Patients` or submit a patient through the intake form.
+
 ## Overview
 
-Hospital Triage System is a FastAPI backend with a Streamlit staff dashboard for patient intake, live queue visibility, emergency alerts, and triage decision review. It also keeps the original OpenEnv reinforcement-learning environment for benchmark and agent-evaluation workflows.
+This project simulates hospital front-desk triage in a practical, explainable way. Staff can enter patient details, view a live queue, monitor urgent cases, and understand why the system assigned a priority level or doctor team.
 
-The project has two clear modes:
+The same repository also includes an OpenEnv-compatible reinforcement learning environment, so the triage workflow can be used both as a user-facing application and as an evaluation benchmark for AI agents.
 
-- **Staff dashboard app**: use this for demos and user-facing hospital triage workflows.
-- **OpenEnv benchmark**: use this for reinforcement-learning tasks, scoring, and validation.
+## Highlights
 
-For the app workflow, medical staff submit patient details through the Streamlit dashboard. The FastAPI backend calculates a priority score, assigns a likely doctor/team, estimates wait time, raises emergency alerts, exposes triage reasoning, and returns compact system-level insights.
+- **Explainable decisions**: every patient includes a short decision summary, detailed reasoning steps, and doctor assignment rationale.
+- **Real-time queue workflow**: the dashboard shows live queue sections, emergency alerts, wait times, and system-level status.
+- **Dual-mode design**: the project supports both a practical dashboard app and an OpenEnv RL benchmark in one backend.
 
-For the benchmark workflow, an AI agent interacts with `/reset` and `/step` to solve hospital triage tasks. Scores are normalized inside the open interval `(0,1)` for OpenEnv compatibility.
+## Features
+
+- Patient intake form with name, age, symptoms, and severity
+- Common symptom suggestions plus free-text symptom input
+- Automatic form reset after successful submission
+- Live queue grouped by high, medium, and low priority
+- Priority color coding for fast triage visibility
+- Emergency alert panel with active and recent events
+- System overview showing doctors available, active emergencies, and average wait time
+- Decision explanations with collapsed reasoning details
+- Doctor assignment explanation for each patient
+- One-click demo queue loading for hackathon walkthroughs
+- OpenEnv-compatible routes for RL benchmarking and validation
+
+## Architecture
+
+### Simple Flow
+
+```text
+User -> Streamlit UI -> FastAPI API -> Triage Logic -> Response
+```
+
+### What Happens
+
+1. A user submits patient details in the Streamlit dashboard.
+2. The FastAPI backend receives the intake request.
+3. The triage service calculates priority, selects a doctor or team, estimates wait time, and generates reasoning.
+4. The frontend refreshes the queue, alerts, and system overview.
+5. The same backend can also serve OpenEnv benchmark routes for RL evaluation.
 
 ## Project Structure
 
@@ -27,155 +82,67 @@ For the benchmark workflow, an AI agent interacts with `/reset` and `/step` to s
 hospital_triage_env/
 +-- backend/
 |   +-- server/
-|   |   +-- app.py                  # FastAPI routes for app + OpenEnv
-|   |   +-- triage_service.py       # App-facing intake, queue, alerts, doctor matching
-|   |   +-- hospital_environment.py # OpenEnv simulation engine
-|   +-- client.py                   # HTTP client for OpenEnv workflows
-|   +-- inference.py                # Benchmark inference runner
-|   +-- models.py                   # Shared Pydantic/OpenEnv models
+|   |   +-- app.py
+|   |   +-- triage_service.py
+|   |   +-- hospital_environment.py
+|   +-- client.py
+|   +-- inference.py
+|   +-- models.py
 |   +-- __init__.py
 +-- frontend/
-|   +-- app.py                  # Streamlit staff dashboard
-|   +-- api_client.py           # REST client and response normalization
-|   +-- requirements.txt        # Frontend dependencies
+|   +-- app.py
+|   +-- api_client.py
+|   +-- requirements.txt
 +-- tests/
 |   +-- test_environment.py
 +-- LICENSE
-+-- openenv.yaml                # OpenEnv manifest
-+-- pyproject.toml              # Backend dependencies
++-- openenv.yaml
++-- pyproject.toml
 +-- Dockerfile
 +-- README.md
 ```
 
-## Staff Dashboard
+## How to Run
 
-The Streamlit dashboard is the primary user interface for medical staff.
+### App Mode
 
-It includes:
-
-- patient intake form with name, age, common symptom suggestions, free-text symptoms, and severity level
-- automatic form clearing after successful submission
-- compact system overview with doctors available, active emergencies, and average wait time
-- grouped live queue sections for High Priority, Medium Priority, and Low Priority
-- one-click demo patient loading for hackathon walkthroughs
-- priority color coding using red, yellow, and green Streamlit status blocks
-- doctor assignment explanation, such as why Emergency Team, Cardiology, Trauma, or General was selected
-- short decision summary shown first, with detailed reasoning collapsed under `View details`
-- emergency escalation alerts with active and recent events
-- triage logic section with scoring rules and patient-specific reasoning
-- collapsed backend settings sidebar for local development
-
-### Run the Dashboard Locally
-
-Start the backend on port `8000`:
+Start the backend:
 
 ```bash
 pip install -e .
 uvicorn backend.server.app:app --host 127.0.0.1 --port 8000
 ```
 
-Start the frontend in another terminal:
+Start the frontend:
 
 ```bash
 pip install -r frontend/requirements.txt
 streamlit run frontend/app.py --server.port 8501 --server.address 127.0.0.1
 ```
 
-The frontend defaults to:
-
-```text
-http://127.0.0.1:8000
-```
-
-You can override it in the Streamlit sidebar or with:
-
-```bash
-TRIAGE_API_BASE_URL=http://127.0.0.1:8000
-```
-
-Open the dashboard at:
+Open:
 
 ```text
 http://127.0.0.1:8501
 ```
 
-## App API
+Default backend URL:
 
-These routes are used by the Streamlit dashboard:
-
-- `GET /health`: backend health check
-- `POST /intake`: create a patient intake record
-- `GET /queue`: return live queue rows
-- `GET /alerts`: return emergency escalation alerts
-- `GET /triage-logic/{patient_id}`: return the priority-score explanation for a patient
-- `GET /system-insights`: return compact operational metrics for the dashboard
-- `POST /demo/seed`: load a realistic sample queue for demos
-
-Example intake request:
-
-```json
-{
-  "patient_name": "Anika Sharma",
-  "age": 42,
-  "symptoms": "Chest pain and shortness of breath",
-  "severity": 5
-}
+```text
+http://127.0.0.1:8000
 ```
 
-Example queue response:
+Optional override:
 
-```json
-{
-  "patients": [
-    {
-      "patient_id": "pt-1234abcd",
-      "patient_name": "Anika Sharma",
-      "age": 42,
-      "symptoms": "Chest pain and shortness of breath",
-      "severity": 5,
-      "priority_score": 100.0,
-      "assigned_doctor": "Emergency Team",
-      "assignment_reason": "Assigned to Emergency Team because severity is emergency-level.",
-      "estimated_wait_time": "Immediate",
-      "status": "Escalated",
-      "decision_summary": "High-priority triage due to severity, emergency status, and/or critical symptom signals.",
-      "emergency_status": true
-    }
-  ]
-}
+```bash
+TRIAGE_API_BASE_URL=http://127.0.0.1:8000
 ```
 
-Example system insights response:
+If the dashboard sidebar shows `Backend unavailable`, confirm the backend URL is exactly `http://127.0.0.1:8000`.
 
-```json
-{
-  "total_doctors": 4,
-  "doctors_available": 4,
-  "active_emergencies": 0,
-  "average_wait_minutes": 0.0
-}
-```
+### OpenEnv Benchmark Mode
 
-## OpenEnv Benchmark
-
-The original RL environment is still available and remains compatible with OpenEnv-style evaluation.
-
-Core OpenEnv routes:
-
-- `GET /tasks`
-- `POST /reset`
-- `POST /step`
-- `GET /state`
-- `GET|POST /grader`
-- `GET|POST /baseline`
-
-Available tasks:
-
-- `task_1_basic_triage`: specialist matching and prioritization
-- `task_2_queue_optimization`: wait-time and resource optimization
-- `task_3_emergency_handling`: emergency escalation and urgent-case handling
-
-Run the OpenEnv backend on the traditional validation port:
+Run the backend on the OpenEnv port:
 
 ```bash
 pip install -e .
@@ -188,44 +155,53 @@ Run benchmark inference:
 python -m backend.inference
 ```
 
-By default, `backend/inference.py` expects:
+Default benchmark backend URL:
 
 ```text
 ENV_BASE_URL=http://127.0.0.1:7860
 ```
 
-Optional inference environment variables:
+## API Endpoints
 
-```bash
-API_BASE_URL=https://your-openai-compatible-endpoint.example/v1
-ENV_BASE_URL=http://127.0.0.1:7860
-MODEL_NAME=gpt-4.1-mini
-HF_TOKEN=your_hf_token
-API_KEY=your_api_key
-```
+### Dashboard App Endpoints
 
-## Backend Design
+- `GET /health` - backend health check
+- `POST /intake` - create a patient intake record
+- `GET /queue` - fetch current queue rows
+- `GET /alerts` - fetch active and recent emergency events
+- `GET /triage-logic/{patient_id}` - fetch detailed decision reasoning
+- `GET /system-insights` - fetch compact system-level metrics
+- `POST /demo/seed` - load a sample demo queue
 
-The backend intentionally separates the app workflow from the benchmark workflow:
+### Demo Seed
 
-- `backend/server/triage_service.py` powers the Streamlit app. It handles patient intake, priority scoring, doctor/team matching, queue rows, alerts, and triage explanations.
-- `frontend/app.py` renders the Streamlit dashboard, grouped queue cards, system overview, intake form, alerts, and triage logic.
-- `frontend/api_client.py` handles REST calls and normalizes backend JSON for the UI.
-- `backend/server/hospital_environment.py` powers OpenEnv simulation. It handles seeded tasks, patient dynamics, rewards, and strict score normalization.
-- `backend/server/app.py` exposes both sets of routes from one FastAPI application.
+`POST /demo/seed` loads a realistic starter queue so the dashboard can be demonstrated immediately without manual data entry.
 
-This keeps the user-facing app simple while preserving the existing RL benchmark behavior.
+### OpenEnv Endpoints
 
-## Docker Deployment
+- `GET /tasks`
+- `POST /reset`
+- `POST /step`
+- `GET /state`
+- `GET|POST /grader`
+- `GET|POST /baseline`
 
-The included Dockerfile serves the FastAPI backend:
+## Demo Instructions
 
-```bash
-docker build -t hospital-triage-system .
-docker run -p 7860:7860 hospital-triage-system
-```
+For a quick walkthrough:
 
-For a full app deployment, run the Streamlit frontend separately or add a process manager/docker-compose setup that starts both FastAPI and Streamlit.
+1. Start the backend and frontend.
+2. Open the dashboard at `http://127.0.0.1:8501`.
+3. Click `Load Demo Patients`.
+4. Review the grouped queue, system overview, emergency alerts, and decision summaries.
+5. Open `View details` on a patient card to inspect the reasoning steps.
+
+For a manual workflow:
+
+1. Enter a new patient through the intake form.
+2. Submit symptoms and severity.
+3. Watch the queue update immediately.
+4. Inspect the assigned doctor, wait time, and decision explanation.
 
 ## Validation
 
@@ -239,5 +215,5 @@ python -m unittest discover -s tests
 
 - The dashboard assumes the backend is running at `http://127.0.0.1:8000` unless changed.
 - The OpenEnv workflow traditionally uses port `7860`.
-- All benchmark scores are defensively normalized to remain strictly inside `(0,1)`.
-- The frontend has fallback readers for `/state`, but the app workflow is cleanest when `/intake`, `/queue`, `/alerts`, `/triage-logic/{patient_id}`, and `/system-insights` are available.
+- Benchmark scores are normalized to remain strictly inside `(0,1)`.
+- The frontend includes fallback readers for `/state`, but the cleanest app flow uses the app-specific endpoints listed above.

@@ -426,6 +426,9 @@ def render_system_insights(client: TriageApiClient) -> None:
     )
     metric_col_2.metric("Active Emergencies", insights.get("active_emergencies", 0))
     metric_col_3.metric("Avg Wait", f"{insights.get('average_wait_minutes', 0)} min")
+    metric_col_1.caption("Currently unassigned clinical teams")
+    metric_col_2.caption("Severity 4-5 or escalated patients")
+    metric_col_3.caption("Average estimated wait across the queue")
     st.divider()
 
 

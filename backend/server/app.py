@@ -34,7 +34,17 @@ def root() -> dict[str, object]:
     return {
         "name": "hospital_triage_env",
         "tasks": list(TASKS.keys()),
-        "methods": ["reset", "step", "state", "intake", "queue", "alerts", "triage_logic"],
+        "methods": [
+            "reset",
+            "step",
+            "state",
+            "intake",
+            "queue",
+            "alerts",
+            "triage_logic",
+            "system_insights",
+            "demo_seed",
+        ],
         "multi_session": True,
     }
 
