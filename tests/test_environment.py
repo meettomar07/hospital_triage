@@ -103,8 +103,9 @@ class HospitalApiTests(unittest.TestCase):
         root_response = self.client.get("/")
         self.assertEqual(root_response.status_code, 200)
         root_payload = root_response.json()
-        self.assertIn("system_insights", root_payload["methods"])
-        self.assertIn("demo_seed", root_payload["methods"])
+        self.assertIn("GET /system-insights", root_payload["methods"])
+        self.assertIn("POST /demo/seed", root_payload["methods"])
+        self.assertIn("GET /triage-logic/{patient_id}", root_payload["methods"])
 
         insights_response = self.client.get("/system-insights")
         self.assertEqual(insights_response.status_code, 200)
