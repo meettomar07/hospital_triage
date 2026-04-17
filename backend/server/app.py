@@ -9,12 +9,19 @@ from typing import Any
 
 import uvicorn
 from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi.middleware.cors import CORSMiddleware
 
 from backend.models import ResetRequest, StepRequest, StepResponse
 from backend.server.hospital_environment import HospitalTriageEnvironment, TASKS, clamp_score
 from backend.server.triage_service import IntakeRequest, TriageService
 
 app = FastAPI(title="Hospital Triage System", version="0.1.0")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 environment_lock = Lock()
 session_environments: dict[str, HospitalTriageEnvironment] = {"default": HospitalTriageEnvironment()}
 triage_lock = Lock()
