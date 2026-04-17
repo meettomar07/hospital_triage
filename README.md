@@ -139,6 +139,8 @@ Optional override:
 TRIAGE_API_BASE_URL=http://127.0.0.1:8000
 ```
 
+If the dashboard sidebar shows `Backend unavailable`, confirm the backend URL is exactly `http://127.0.0.1:8000`.
+
 ### OpenEnv Benchmark Mode
 
 Run the backend on the OpenEnv port:
