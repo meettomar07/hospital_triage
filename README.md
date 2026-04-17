@@ -12,8 +12,9 @@ A hospital triage dashboard and simulation backend built with FastAPI and Stream
 
 ## Live Demo
 
-- **Frontend (Streamlit):** https://hospitaltriageenv-dgx4gpqnn4y7lw2vqvvhpf.streamlit.app
+- **Frontend (Streamlit):** https://hospitaltriage-dgx4gpqnn4y7lw2vqvvhpf.streamlit.app
 - **Backend (Vercel):** https://hospital-triage-eta.vercel.app
+- **GitHub:** https://github.com/meettomar07/hospital_triage
 
 Click `Load Demo Patients` or submit a patient through the intake form.
 
