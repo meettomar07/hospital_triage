@@ -10,7 +10,14 @@ pinned: false
 
 A hospital triage dashboard and simulation backend built with FastAPI and Streamlit, with an OpenEnv-compatible reinforcement learning environment for benchmarking agent behavior.
 
-## Quick Demo
+## Live Demo
+
+- **Frontend (Streamlit):** https://hospitaltriageenv-dgx4gpqnn4y7lw2vqvvhpf.streamlit.app
+- **Backend (Vercel):** https://hospital-triage-eta.vercel.app
+
+Click `Load Demo Patients` or submit a patient through the intake form.
+
+## Quick Demo (Local)
 
 1. Start the backend:
 
@@ -95,6 +102,9 @@ hospital_triage_env/
 |   +-- requirements.txt
 +-- tests/
 |   +-- test_environment.py
++-- app.py
++-- requirements.txt
++-- vercel.json
 +-- LICENSE
 +-- openenv.yaml
 +-- pyproject.toml
@@ -104,7 +114,7 @@ hospital_triage_env/
 
 ## How to Run
 
-### App Mode
+### App Mode (Local)
 
 Start the backend:
 
@@ -139,6 +149,16 @@ TRIAGE_API_BASE_URL=http://127.0.0.1:8000
 ```
 
 If the dashboard sidebar shows `Backend unavailable`, confirm the backend URL is exactly `http://127.0.0.1:8000`.
+
+### App Mode (Deployed)
+
+The backend is deployed on Vercel and the frontend on Streamlit Community Cloud.
+
+To connect the Streamlit frontend to the Vercel backend, set the following secret in Streamlit Cloud (Settings → Secrets):
+
+```toml
+TRIAGE_API_BASE_URL = "https://hospital-triage-eta.vercel.app"
+```
 
 ### OpenEnv Benchmark Mode
 
