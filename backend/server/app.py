@@ -39,7 +39,7 @@ def get_environment(session_id: str) -> HospitalTriageEnvironment:
 @app.get("/")
 def root() -> dict[str, object]:
     return {
-        "name": "hospital_triage_env",
+        "name": "hospital_triage",
         "tasks": list(TASKS.keys()),
         "methods": [
             "POST /reset",

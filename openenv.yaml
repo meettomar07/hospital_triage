@@ -1,5 +1,5 @@
 spec_version: 1
-name: hospital_triage_env
+name: hospital_triage
 description: Hospital triage reinforcement environment with strict open-interval scoring.
 
 entrypoint:

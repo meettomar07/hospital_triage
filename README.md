@@ -86,7 +86,7 @@ User -> Streamlit UI -> FastAPI API -> Triage Logic -> Response
 ## Project Structure
 
 ```text
-hospital_triage_env/
+hospital_triage/
 +-- backend/
 |   +-- server/
 |   |   +-- app.py

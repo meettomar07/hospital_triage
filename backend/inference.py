@@ -19,7 +19,7 @@ TASKS = [
     "task_3_emergency_handling",
 ]
 
-BENCHMARK_NAME = "hospital_triage_env"
+BENCHMARK_NAME = "hospital_triage"
 LOG_DIR = Path("outputs/logs")
 EVAL_DIR = Path("outputs/evals")
 VALID_ACTIONS = {"assign", "mark_emergency", "reorder_queue", "escalate_emergency", "redirect", "wait"}
