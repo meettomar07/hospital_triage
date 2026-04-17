@@ -9,6 +9,8 @@ Expected primary endpoints:
     GET  /queue
     GET  /alerts
     GET  /triage-logic/{patient_id}
+    GET  /system-insights
+    POST /demo/seed
 
 For easier local development with the existing OpenEnv-style backend, this
 client also includes best-effort fallback readers for /state when /queue or
