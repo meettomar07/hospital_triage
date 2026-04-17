@@ -174,6 +174,10 @@ ENV_BASE_URL=http://127.0.0.1:7860
 - `GET /system-insights` - fetch compact system-level metrics
 - `POST /demo/seed` - load a sample demo queue
 
+### Demo Seed
+
+`POST /demo/seed` loads a realistic starter queue so the dashboard can be demonstrated immediately without manual data entry.
+
 ### OpenEnv Endpoints
 
 - `GET /tasks`
