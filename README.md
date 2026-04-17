@@ -1,6 +1,5 @@
 ---
 title: Hospital Triage System
-emoji: hospital
 colorFrom: blue
 colorTo: purple
 sdk: docker
