@@ -40,8 +40,7 @@ hospital_triage_env/
 |   +-- requirements.txt        # Frontend dependencies
 +-- tests/
 |   +-- test_environment.py
-+-- scripts/
-|   +-- validate-submission.sh
++-- LICENSE
 +-- openenv.yaml                # OpenEnv manifest
 +-- pyproject.toml              # Backend dependencies
 +-- Dockerfile
@@ -234,12 +233,6 @@ Run tests with:
 
 ```bash
 python -m unittest discover -s tests
-```
-
-For OpenEnv submission checks:
-
-```bash
-bash scripts/validate-submission.sh https://<your-space>.hf.space
 ```
 
 ## Notes
