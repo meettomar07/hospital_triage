@@ -1,0 +1,374 @@
+"""Regression tests for the hospital triage environment."""
+
+from __future__ import annotations
+
+import unittest
+
+from fastapi.testclient import TestClient
+from pydantic import ValidationError
+
+from backend.inference import discover_tasks, normalize_score, normalize_task_score
+from backend.models import HospitalAction
+from backend.server.app import app
+from backend.server.hospital_environment import HospitalTriageEnvironment
+
+
+class HospitalEnvironmentTests(unittest.TestCase):
+    def test_reset_is_deterministic_for_same_seed(self) -> None:
+        env_a = HospitalTriageEnvironment()
+        env_b = HospitalTriageEnvironment()
+
+        first = env_a.reset(task_id="task_2_queue_optimization", seed=17).model_dump()
+        second = env_b.reset(task_id="task_2_queue_optimization", seed=17).model_dump()
+
+        self.assertEqual(first, second)
+
+    def test_assign_requires_patient_and_doctor(self) -> None:
+        with self.assertRaises(ValidationError):
+            HospitalAction(action_type="assign", patient_id="p1")
+
+    def test_invalid_escalation_is_reported_in_info(self) -> None:
+        env = HospitalTriageEnvironment()
+        env.reset(task_id="task_1_basic_triage", seed=7)
+
+        observation, reward, done, info = env.step(
+            HospitalAction(action_type="escalate_emergency", patient_id="p2")
+        )
+
+        self.assertFalse(done)
+        self.assertFalse(info["action_valid"])
+        self.assertLess(reward.components["invalid_action_penalty"], 0.0)
+        self.assertIn("Escalation is only useful", info["message"])
+        self.assertIn("debug", info)
+        self.assertGreater(reward.value, 0.0)
+        self.assertLess(reward.value, 1.0)
+        self.assertGreater(reward.total, 0.0)
+        self.assertLess(reward.total, 1.0)
+        self.assertIn("reward_breakdown", info)
+        self.assertEqual(observation.task_id, "task_1_basic_triage")
+
+    def test_task_scores_are_strictly_within_open_interval(self) -> None:
+        env = HospitalTriageEnvironment()
+        env.reset(task_id="task_1_basic_triage", seed=7)
+
+        initial_scores = env._task_score()
+        for value in initial_scores.values():
+            self.assertGreater(value, 0.0)
+            self.assertLess(value, 1.0)
+
+        _, _, _, info = env.step(HospitalAction(action_type="wait"))
+        self.assertIsInstance(info["task_score"], float)
+        self.assertGreater(info["task_score"], 0.0)
+        self.assertLess(info["task_score"], 1.0)
+        self.assertGreater(info["reward"]["value"], 0.0)
+        self.assertLess(info["reward"]["value"], 1.0)
+        self.assertGreater(info["reward"]["total"], 0.0)
+        self.assertLess(info["reward"]["total"], 1.0)
+        self.assertIn("score_breakdown", info)
+        for value in info["score_breakdown"].values():
+            self.assertGreater(value, 0.0)
+            self.assertLess(value, 1.0)
+
+
+class ScoreNormalizationTests(unittest.TestCase):
+    def test_normalize_score_clamps_to_open_interval(self) -> None:
+        self.assertGreater(normalize_score(0.0), 0.0)
+        self.assertLess(normalize_score(0.0), 1.0)
+        self.assertGreater(normalize_score(1.0), 0.0)
+        self.assertLess(normalize_score(1.0), 1.0)
+
+    def test_normalize_task_score_clamps_every_field(self) -> None:
+        normalized = normalize_task_score({"overall": 0.0, "wait_score": 1.0, "safety_score": "bad"})
+
+        for value in normalized.values():
+            self.assertGreater(value, 0.0)
+            self.assertLess(value, 1.0)
+
+
+class HospitalApiTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.client = TestClient(app)
+
+    def tearDown(self) -> None:
+        self.client.close()
+
+    def test_invalid_task_returns_422(self) -> None:
+        response = self.client.post("/reset", json={"task_id": "missing_task", "seed": 1})
+
+        self.assertEqual(response.status_code, 422)
+        payload = response.json()
+        self.assertIn("available_tasks", payload["detail"])
+
+    def test_state_includes_seed_and_event_log(self) -> None:
+        self.client.post("/reset", json={"task_id": "task_1_basic_triage", "seed": 11})
+        response = self.client.get("/state")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["seed"], 11)
+        self.assertTrue(payload["event_log"])
+
+    def test_sessions_are_isolated(self) -> None:
+        self.client.post("/reset", json={"task_id": "task_1_basic_triage", "seed": 11, "session_id": "alpha"})
+        self.client.post("/reset", json={"task_id": "task_2_queue_optimization", "seed": 17, "session_id": "beta"})
+
+        alpha_state = self.client.get("/state", params={"session_id": "alpha"})
+        beta_state = self.client.get("/state", params={"session_id": "beta"})
+
+        self.assertEqual(alpha_state.status_code, 200)
+        self.assertEqual(beta_state.status_code, 200)
+        self.assertEqual(alpha_state.json()["task"]["task_id"], "task_1_basic_triage")
+        self.assertEqual(beta_state.json()["task"]["task_id"], "task_2_queue_optimization")
+
+    def test_dashboard_intake_queue_alerts_and_logic_match_frontend_contract(self) -> None:
+        intake_response = self.client.post(
+            "/intake",
+            json={
+                "patient_name": "Anika Sharma",
+                "age": 42,
+                "symptoms": "Chest pain and shortness of breath",
+                "severity": 5,
+            },
+        )
+
+        self.assertEqual(intake_response.status_code, 200)
+        patient = intake_response.json()
+        self.assertIn("patient_id", patient)
+        self.assertEqual(patient["status"], "Escalated")
+        self.assertEqual(patient["assigned_doctor"], "Emergency Team")
+        self.assertIn("assignment_reason", patient)
+
+        queue_response = self.client.get("/queue")
+        self.assertEqual(queue_response.status_code, 200)
+        queue_payload = queue_response.json()
+        self.assertIn("patients", queue_payload)
+        self.assertTrue(queue_payload["patients"])
+        self.assertIn("assignment_reason", queue_payload["patients"][0])
+
+        insights_response = self.client.get("/system-insights")
+        self.assertEqual(insights_response.status_code, 200)
+        insights_payload = insights_response.json()
+        self.assertIn("doctors_available", insights_payload)
+        self.assertIn("active_emergencies", insights_payload)
+        self.assertIn("average_wait_minutes", insights_payload)
+
+        alerts_response = self.client.get("/alerts")
+        self.assertEqual(alerts_response.status_code, 200)
+        alerts_payload = alerts_response.json()
+        self.assertIn("alerts", alerts_payload)
+        self.assertTrue(alerts_payload["alerts"])
+
+        logic_response = self.client.get(f"/triage-logic/{patient['patient_id']}")
+        self.assertEqual(logic_response.status_code, 200)
+        logic_payload = logic_response.json()
+        self.assertIn("reasoning", logic_payload)
+        self.assertIn("factors", logic_payload)
+
+    def test_demo_seed_populates_queue(self) -> None:
+        response = self.client.post("/demo/seed")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertGreaterEqual(payload["created"], 3)
+
+        queue_response = self.client.get("/queue")
+        self.assertEqual(queue_response.status_code, 200)
+        queue_payload = queue_response.json()
+        self.assertGreaterEqual(len(queue_payload["patients"]), 3)
+
+    def test_grader_returns_open_interval_scores(self) -> None:
+        response = self.client.post(
+            "/grader",
+            json={
+                "summary": [
+                    {"task_id": "task_1_basic_triage", "score": 1.0},
+                    {"task_id": "task_2_queue_optimization", "score": 0.0},
+                    {"task_id": "task_3_emergency_handling", "score": "bad"},
+                ]
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        for item in payload:
+            self.assertGreater(item["score"], 0.0)
+            self.assertLess(item["score"], 1.0)
+
+    def test_grader_accepts_unknown_task_ids(self) -> None:
+        response = self.client.post(
+            "/grader",
+            json=[
+                {"task_id": "hidden_task_a", "score": 1.0},
+                {"task_id": "hidden_task_b", "score": 0.0},
+            ],
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        task_ids = {item["task_id"] for item in payload}
+        self.assertIn("hidden_task_a", task_ids)
+        self.assertIn("hidden_task_b", task_ids)
+        for item in payload:
+            self.assertGreater(item["score"], 0.0)
+            self.assertLess(item["score"], 1.0)
+
+    def test_grader_accepts_stringified_payload(self) -> None:
+        response = self.client.post(
+            "/grader",
+            json='{"summary":[{"task_id":"hidden_task_a","score":1.0},{"task_id":"hidden_task_b","score":0.0}]}',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        task_ids = {item["task_id"] for item in payload}
+        self.assertEqual(task_ids, {"hidden_task_a", "hidden_task_b"})
+        for item in payload:
+            self.assertGreater(item["score"], 0.0)
+            self.assertLess(item["score"], 1.0)
+
+    def test_grader_accepts_list_of_task_id_strings(self) -> None:
+        response = self.client.post("/grader", json=["hidden_task_a", "hidden_task_b"])
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        task_ids = {item["task_id"] for item in payload}
+        self.assertEqual(task_ids, {"hidden_task_a", "hidden_task_b"})
+        for item in payload:
+            self.assertGreater(item["score"], 0.0)
+            self.assertLess(item["score"], 1.0)
+
+    def test_grader_accepts_task_scores_map(self) -> None:
+        response = self.client.post(
+            "/grader",
+            json={"task_scores": {"hidden_task_a": 0.0, "hidden_task_b": 1.0}},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        task_ids = {item["task_id"] for item in payload}
+        self.assertEqual(task_ids, {"hidden_task_a", "hidden_task_b"})
+        for item in payload:
+            self.assertGreater(item["score"], 0.0)
+            self.assertLess(item["score"], 1.0)
+
+    def test_grader_accepts_id_key_in_results(self) -> None:
+        response = self.client.post(
+            "/grader",
+            json={"results": [{"id": "hidden_task_a", "score": 0.0}, {"id": "hidden_task_b", "score": 1.0}]},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        task_ids = {item["task_id"] for item in payload}
+        self.assertEqual(task_ids, {"hidden_task_a", "hidden_task_b"})
+        for item in payload:
+            self.assertGreater(item["score"], 0.0)
+            self.assertLess(item["score"], 1.0)
+
+    def test_grader_ignores_non_task_strings(self) -> None:
+        response = self.client.post("/grader", json={"note": "this is not a task id"})
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        task_ids = {item["task_id"] for item in payload}
+        self.assertEqual(task_ids, {"task_1_basic_triage", "task_2_queue_optimization", "task_3_emergency_handling"})
+
+    def test_baseline_mirrors_payload_task_ids(self) -> None:
+        response = self.client.post(
+            "/baseline",
+            json={"tasks": [{"task_id": "hidden_task_a"}, {"task_id": "hidden_task_b"}]},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        task_ids = {item["task_id"] for item in payload}
+        self.assertEqual(task_ids, {"hidden_task_a", "hidden_task_b"})
+        for item in payload:
+            self.assertGreater(item["score"], 0.0)
+            self.assertLess(item["score"], 1.0)
+
+    def test_grade_alias_matches_grader_behavior(self) -> None:
+        response = self.client.post(
+            "/grade",
+            json={"results": [{"id": "hidden_task_a", "score": 0.0}, {"id": "hidden_task_b", "score": 1.0}]},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        task_ids = {item["task_id"] for item in payload}
+        self.assertEqual(task_ids, {"hidden_task_a", "hidden_task_b"})
+        for item in payload:
+            self.assertGreater(item["score"], 0.0)
+            self.assertLess(item["score"], 1.0)
+
+    def test_base_alias_matches_baseline_behavior(self) -> None:
+        response = self.client.post(
+            "/base",
+            json={"tasks": ["hidden_task_a", "hidden_task_b"]},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        task_ids = {item["task_id"] for item in payload}
+        self.assertEqual(task_ids, {"hidden_task_a", "hidden_task_b"})
+        for item in payload:
+            self.assertGreater(item["score"], 0.0)
+            self.assertLess(item["score"], 1.0)
+
+    def test_grader_accepts_put_and_trailing_slash(self) -> None:
+        response = self.client.put(
+            "/grader/",
+            json={"task_scores": {"hidden_task_a": 0.0, "hidden_task_b": 1.0}},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        task_ids = {item["task_id"] for item in payload}
+        self.assertEqual(task_ids, {"hidden_task_a", "hidden_task_b"})
+        for item in payload:
+            self.assertGreater(item["score"], 0.0)
+            self.assertLess(item["score"], 1.0)
+
+    def test_grader_raw_body_regex_fallback(self) -> None:
+        response = self.client.request(
+            "POST",
+            "/grader",
+            content='malformed payload task_id":"hidden_task_a" and {"task":"hidden_task_b"}',
+            headers={"content-type": "text/plain"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        task_ids = {item["task_id"] for item in payload}
+        self.assertEqual(task_ids, {"hidden_task_a", "hidden_task_b"})
+        for item in payload:
+            self.assertGreater(item["score"], 0.0)
+            self.assertLess(item["score"], 1.0)
+
+    def test_grader_handles_invalid_json_content_type_without_422(self) -> None:
+        response = self.client.request(
+            "POST",
+            "/grader",
+            content='{"summary":[{"task_id":"hidden_task_a","score":0.0},',
+            headers={"content-type": "application/json"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertTrue(payload)
+        for item in payload:
+            self.assertGreater(item["score"], 0.0)
+            self.assertLess(item["score"], 1.0)
+
+
+class TaskDiscoveryTests(unittest.TestCase):
+    def test_discover_tasks_prefers_remote_list(self) -> None:
+        class FakeEnv:
+            def tasks(self) -> dict[str, object]:
+                return {"tasks": [{"task_id": "x"}, {"task_id": "y"}]}
+
+        self.assertEqual(discover_tasks(FakeEnv()), ["x", "y"])
+
+
+if __name__ == "__main__":
+    unittest.main()
